@@ -32,14 +32,13 @@ const COURSE_OPTIONS = [
 ];
 
 // --- HELPERS ---
-// VAQT LOGIKASI (YANGI)
 const getTimePerQuestion = (courseName) => {
     if (!courseName) return 60;
     const name = courseName.toLowerCase();
-    if (name.includes('html') || name.includes('css')) return 30; // 30 soniya
-    if (name.includes('js') || name.includes('javascript')) return 45; // 45 soniya
-    if (name.includes('react')) return 60; // 60 soniya
-    return 60; // Default
+    if (name.includes('html') || name.includes('css')) return 30; 
+    if (name.includes('js') || name.includes('javascript')) return 45; 
+    if (name.includes('react')) return 60; 
+    return 60; 
 };
 
 const formatTotalTime = (seconds) => {
@@ -78,6 +77,16 @@ const formatInputToDisplay = (dateString) => {
     return dateString;
 };
 
+// --- AVATAR COLOR GENERATOR ---
+const stringToColor = (string) => {
+    let hash = 0;
+    for (let i = 0; i < string.length; i++) {
+        hash = string.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+    return '#' + '00000'.substring(0, 6 - c.length) + c;
+};
+
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -103,6 +112,7 @@ export default function AdminDashboard() {
   const [chatMessage, setChatMessage] = useState("");
   const [chatFile, setChatFile] = useState(null);
   const fileInputRef = useRef(null); 
+  const messagesEndRef = useRef(null);
   
   // ATTENDANCE & GRADES
   const [attendanceDate, setAttendanceDate] = useState(new Date().toLocaleDateString('en-CA'));
@@ -116,7 +126,6 @@ export default function AdminDashboard() {
   const [gradingExamId, setGradingExamId] = useState("");
   const [gradingGroupId, setGradingGroupId] = useState("");
   const [gradingStudentId, setGradingStudentId] = useState("");
-  
   const [calculatedDailyScore, setCalculatedDailyScore] = useState(0); 
   const [theoryScore, setTheoryScore] = useState(0); 
   const [practicalScore, setPracticalScore] = useState(0); 
@@ -149,7 +158,6 @@ export default function AdminDashboard() {
   const [userFormData, setUserFormData] = useState({ name: '', phone: '', password: '', role: 'student', schedule: 'odd_days', course: COURSE_OPTIONS[0], parentId: '', status: 'active' });
 
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' }); 
-  const messagesEndRef = useRef(null);
   const { logout } = useData();
   const navigate = useNavigate();
 
@@ -171,7 +179,7 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => { fetchData(); const interval = setInterval(fetchData, 5000); return () => clearInterval(interval); }, []);
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [selectedGroup]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [selectedGroup, selectedGroup?.messages]);
 
   // HELPERS
   const getCoursePrice = (course, schedule) => schedule === 'daily' ? (course === 'Foundation' ? 650000 : 880000) : (course === 'Foundation' ? 330000 : 440000);
@@ -270,7 +278,22 @@ export default function AdminDashboard() {
   const handleCommentChange = (id, v) => setGradeMap(prev => ({ ...prev, [id]: { ...prev[id], comment: v } }));
   const saveGrades = async () => { if (!selectedGroup) return; const displayDate = formatInputToDisplay(gradeDate); const records = Object.keys(gradeMap).map(id => ({ studentId: id, ...gradeMap[id] })); try { await axios.post(`http://localhost:5000/api/groups/${selectedGroup._id}/grades`, { date: displayDate, records }); showToast("Baholar saqlandi!", "success"); fetchData(); } catch (e) { showToast("Xatolik", "error"); } };
 
-  const handleSendMessage = async (e) => { e.preventDefault(); if (!chatMessage.trim() && !chatFile) return; const fd = new FormData(); fd.append('sender', 'Admin'); fd.append('text', chatMessage); fd.append('time', new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})); if (chatFile) fd.append('file', chatFile); try { const res = await axios.post(`http://localhost:5000/api/groups/${selectedGroup._id}/message`, fd); setSelectedGroup(res.data); setChatMessage(""); setChatFile(null); if(fileInputRef.current) fileInputRef.current.value = ""; } catch(e) { showToast(e.response?.data?.message || "Xato", "error"); } };
+  const handleSendMessage = async (e) => { 
+      e.preventDefault(); 
+      if ((!chatMessage.trim() && !chatFile) || !selectedGroup) return; 
+      const fd = new FormData(); 
+      fd.append('sender', 'Admin'); 
+      fd.append('text', chatMessage); 
+      fd.append('time', new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})); 
+      if (chatFile) fd.append('file', chatFile); 
+      try { 
+          const res = await axios.post(`http://localhost:5000/api/groups/${selectedGroup._id}/message`, fd); 
+          setSelectedGroup(res.data); 
+          setChatMessage(""); 
+          setChatFile(null); 
+          if(fileInputRef.current) fileInputRef.current.value = ""; 
+      } catch(e) { showToast(e.response?.data?.message || "Xato", "error"); } 
+  };
 
   const openCreateModal = () => { setEditingGroup(null); setGroupFormData({ name: '', time: '08:00 - 10:00', days: 'odd_days', selectedStudents: [] }); setIsGroupModalOpen(true); };
   const openEditModal = (e, group) => { e.stopPropagation(); setEditingGroup(group); setGroupFormData({ name: group.name, time: group.time, days: group.days, selectedStudents: group.students.map(s => s._id) }); setIsGroupModalOpen(true); };
@@ -301,7 +324,88 @@ export default function AdminDashboard() {
             {activeTab === 'dashboard' && (<motion.div key="dashboard" initial="initial" animate="in" exit="out" variants={pageVariants}><h2 className="text-3xl font-bold text-slate-800 mb-8">Boshqaruv Paneli</h2><div className="grid md:grid-cols-4 gap-6 mb-10"><div className="bg-gradient-to-r from-green-600 to-green-500 p-6 rounded-2xl shadow-lg text-white flex items-center justify-between"><div><p className="text-green-100 text-sm font-bold uppercase">Joriy Oy Tushumi</p><h3 className="text-2xl font-bold mt-1">{(financeStats.monthlyRevenue[getCurrentMonthName()] || 0).toLocaleString()} so'm</h3></div><div className="bg-white/20 p-4 rounded-xl text-3xl"><FaMoneyBillWave /></div></div><div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-2xl shadow-lg text-white flex items-center justify-between"><div><p className="text-blue-100 text-sm font-bold uppercase">O'quvchilar</p><h3 className="text-3xl font-bold mt-1">{stats.students}</h3></div><div className="bg-white/20 p-4 rounded-xl text-3xl"><FaUserGraduate /></div></div><div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6 rounded-2xl shadow-lg text-white flex items-center justify-between"><div><p className="text-orange-100 text-sm font-bold uppercase">Ota-onalar</p><h3 className="text-3xl font-bold mt-1">{stats.parents}</h3></div><div className="bg-white/20 p-4 rounded-xl text-3xl"><FaUserTie /></div></div><div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-6 rounded-2xl shadow-lg text-white flex items-center justify-between"><div><p className="text-emerald-100 text-sm font-bold uppercase">Guruhlar</p><h3 className="text-3xl font-bold mt-1">{stats.groups}</h3></div><div className="bg-white/20 p-4 rounded-xl text-3xl"><FaLayerGroup /></div></div></div><div className="bg-white rounded-2xl shadow-lg p-8 border border-gray-200"><div className="flex items-center gap-3 mb-6 pb-4 border-b"><div className="bg-indigo-100 p-3 rounded-full text-indigo-600"><FaBullhorn size={24} /></div><div><h3 className="text-xl font-bold text-slate-800">E'lon Yuborish</h3><p className="text-sm text-gray-500">Barcha foydalanuvchilarga xabar tarqating</p></div></div><form onSubmit={handleSendBroadcast} className="space-y-4"><div className="grid md:grid-cols-2 gap-4"><div><label className="block text-sm font-bold text-gray-700 mb-1">Mavzu</label><input type="text" placeholder="Mavzu" className="w-full p-3 border rounded-lg" value={broadcastData.title} onChange={e => setBroadcastData({...broadcastData, title: e.target.value})} /></div><div><label className="block text-sm font-bold text-gray-700 mb-1">Kimga?</label><select className="w-full p-3 border rounded-lg bg-white" value={broadcastData.target} onChange={e => setBroadcastData({...broadcastData, target: e.target.value})}><option value="all">Barchaga</option><option value="student">O'quvchilarga</option><option value="parent">Ota-onalarga</option></select></div></div><div><label className="block text-sm font-bold text-gray-700 mb-1">Matn</label><textarea rows="4" placeholder="Xabar..." className="w-full p-3 border rounded-lg" value={broadcastData.message} onChange={e => setBroadcastData({...broadcastData, message: e.target.value})}></textarea></div><div className="flex justify-end"><button type="submit" className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg flex items-center gap-2"><FaPaperPlane /> Yuborish</button></div></form></div></motion.div>)}
             {activeTab === 'revenue' && (<motion.div key="revenue" initial="initial" animate="in" exit="out" variants={pageVariants}><div className="flex justify-between items-center mb-8"><h2 className="text-3xl font-bold text-slate-800">Moliya & Kirimlar</h2><div className="bg-green-100 text-green-700 px-6 py-2 rounded-xl font-bold text-lg border border-green-200">Jami Tushum: {financeStats.totalRevenue.toLocaleString()} so'm</div></div><div className="grid md:grid-cols-2 gap-8 mb-10"><div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-200"><h3 className="text-lg font-bold text-slate-700 mb-6 flex items-center gap-2"><FaChartLine className="text-indigo-500"/> Oylik Tushumlar</h3><div style={{width:'100%',height:300}}><ResponsiveContainer width="99%" height="100%" minWidth={0}><BarChart data={barData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} /><YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} tickFormatter={(val) => `${val/1000}k`} /><Tooltip cursor={{fill: '#F3F4F6'}} contentStyle={{borderRadius: '10px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} /><Bar dataKey="tushum" fill="#4F46E5" radius={[4, 4, 0, 0]} barSize={40} /></BarChart></ResponsiveContainer></div></div><div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-200"><h3 className="text-lg font-bold text-slate-700 mb-6 flex items-center gap-2"><FaChartPie className="text-green-500"/> Kurslar Kesimida</h3><div style={{width:'100%',height:300}}><ResponsiveContainer width="99%" height="100%" minWidth={0}><PieChart><Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">{pieData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}</Pie><Tooltip /><Legend verticalAlign="bottom" height={36}/></PieChart></ResponsiveContainer></div></div></div><div className="bg-white rounded-xl shadow-sm border overflow-hidden"><table className="w-full text-left"><thead className="bg-slate-50 border-b"><tr><th className="p-4">Oy</th><th className="p-4 text-right">Tushum</th><th className="p-4 text-right">Holat</th></tr></thead><tbody>{paymentMonthsList.map((month, idx) => { const amount = financeStats.monthlyRevenue[month] || 0; return (<tr key={idx} className="border-b hover:bg-slate-50 last:border-0"><td className="p-4 font-bold text-slate-700">{month}</td><td className="p-4 text-right font-mono font-bold text-indigo-600">{amount.toLocaleString()} so'm</td><td className="p-4 text-right">{amount > 0 ? <span className="text-green-500 text-xs font-bold bg-green-100 px-2 py-1 rounded">FOYDA</span> : <span className="text-gray-400 text-xs">-</span>}</td></tr>) })}</tbody></table></div></motion.div>)}
             {activeTab === 'payments' && (<motion.div key="payments" initial="initial" animate="in" exit="out" variants={pageVariants}><div className="flex justify-between items-center mb-8"><h2 className="text-3xl font-bold text-slate-800">To'lovlar</h2><div className="flex gap-3"><button onClick={downloadExcel} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-green-700 shadow-lg"><FaDownload /> Excel</button><select className="p-2 border rounded-lg bg-white text-gray-600 font-bold" value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)}><option value="all">Barchasi</option><option value="paid">To'laganlar</option><option value="unpaid">Qarzdorlar</option></select><select className="p-2 border rounded-lg shadow-sm font-bold bg-white text-indigo-600" value={paymentMonth} onChange={e => setPaymentMonth(e.target.value)}>{paymentMonthsList.map(month => (<option key={month} value={month}>{month}</option>))}</select></div></div><div className="bg-white rounded-xl shadow-sm border overflow-hidden"><table className="w-full text-left"><thead className="bg-slate-50 border-b"><tr><th className="p-4">O'quvchi</th><th className="p-4">Kurs & Rejim</th><th className="p-4">Summa</th><th className="p-4 text-center">Status</th><th className="p-4 text-center">Amallar</th></tr></thead><tbody>{getPaymentUsers().length === 0 ? <tr><td colSpan="5" className="p-6 text-center text-gray-400">O'quvchilar yo'q.</td></tr> : getPaymentUsers().map((student, i) => { const paymentInfo = student.payments?.find(p => p.month === paymentMonth); const isPaid = !!paymentInfo; const price = getCoursePrice(student.course || 'Foundation', student.schedule || 'odd_days'); return (<tr key={i} className="border-b hover:bg-slate-50"><td className="p-4"><div className="font-bold text-slate-700">{student.name}</div>{isPaid && <div className="text-[10px] text-gray-500 flex items-center gap-1 mt-1"><FaCommentDollar /> {paymentInfo.comment}</div>}</td><td className="p-4"><span className="font-bold">{student.course || 'Foundation'}</span><br/><span className="text-xs text-gray-500">{student.schedule === 'daily' ? 'Har kuni' : student.schedule === 'even_days' ? 'Sesh-Pay-Shan' : 'Dush-Chor-Juma'}</span></td><td className="p-4 font-mono font-bold text-indigo-600">{price.toLocaleString()} so'm</td><td className="p-4 text-center">{isPaid ? <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-xs font-bold">TO'LANGAN</span> : <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold">QARZ</span>}</td><td className="p-4 flex justify-center gap-2">{!isPaid && (<><button onClick={() => openPaymentModal(student)} className="bg-emerald-500 text-white p-2 rounded-lg hover:bg-emerald-600"><FaCheck /></button><button onClick={() => handlePaymentReminder(student)} className="bg-yellow-400 text-white p-2 rounded-lg hover:bg-yellow-500"><FaBell /></button></>)}{isPaid && <span className="text-green-500 text-2xl"><FaCheckCircle /></span>}</td></tr>) })}</tbody></table></div></motion.div>)}
-            {activeTab === 'groups' && (<motion.div key="groups" initial="initial" animate="in" exit="out" variants={pageVariants} className="h-full flex flex-col">{!selectedGroup ? (<><div className="flex justify-between items-center mb-8"><h2 className="text-3xl font-bold text-slate-800">Guruhlar</h2><div className="flex gap-3"><div className="relative"><FaFilter className="absolute left-3 top-3 text-indigo-500" /><select className="pl-9 pr-4 py-2.5 border rounded-lg bg-white" value={filterDays} onChange={(e) => setFilterDays(e.target.value)}><option value="all">Barcha</option><option value="odd_days">Dush-Chor-Juma</option><option value="even_days">Sesh-Pay-Shan</option><option value="daily">Har kuni</option></select></div><button onClick={openCreateModal} className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-indigo-700"><FaPlus /> Guruh Yaratish</button></div></div>{filteredGroups.length === 0 ? <p className="text-center text-gray-400">Guruhlar yo'q.</p> : <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">{filteredGroups.map(group => (<div key={group._id} onClick={() => setSelectedGroup(group)} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:shadow-lg relative overflow-hidden group"><div className="flex justify-between items-center mb-2"><div className="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded-full"><FaClock /> {group.time}</div><div className="bg-green-50 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full"><FaCalendarAlt /> {group.days === 'odd_days' ? 'Dush-Chor-Juma' : group.days === 'even_days' ? 'Sesh-Pay-Shan' : 'Har kuni'}</div></div><h3 className="text-xl font-bold text-slate-800 mb-1">{group.name}</h3><p className="text-gray-500 text-sm">{group.students.length} ta o'quvchi</p></div>))}</div>}</>) : (<div className="flex flex-col h-[calc(100vh-100px)] bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200"><div className="bg-slate-900 text-white p-4 flex justify-between items-center"><div className="flex items-center gap-3"><button onClick={() => setSelectedGroup(null)} className="text-gray-400 hover:text-white mr-2">← Orqaga</button><div className="font-bold">{selectedGroup.name} (Chat)</div></div></div><div className="flex-1 bg-slate-50 p-4 overflow-y-auto space-y-4">{selectedGroup.messages.map((msg, idx) => (<div key={idx} className={`flex ${msg.sender === 'Admin' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[70%] p-3 rounded-xl shadow-sm ${msg.sender === 'Admin' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-800'}`}>{msg.text} {msg.file && <a href={`http://localhost:5000${msg.file}`} target="_blank" rel="noopener noreferrer" className="block mt-2 text-indigo-200 underline text-xs">Fayl: {msg.fileName}</a>}</div></div>))}<div ref={messagesEndRef} /></div><form onSubmit={handleSendMessage} className="p-4 bg-white border-t flex items-center gap-2"><input type="file" ref={fileInputRef} onChange={e => setChatFile(e.target.files[0])} className="hidden" /><button type="button" onClick={() => fileInputRef.current.click()} className="text-gray-400 hover:text-indigo-600 p-2"><FaPaperclip /></button>{chatFile && <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">{chatFile.name.substring(0, 10)}...</span>}<input type="text" placeholder="Xabar..." className="flex-1 bg-gray-100 border-0 rounded-full px-4 py-2 outline-none" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)} /><button className="bg-indigo-600 text-white p-3 rounded-full"><FaPaperPlane /></button></form></div>)}</motion.div>)}
+            {activeTab === 'groups' && (<motion.div key="groups" initial="initial" animate="in" exit="out" variants={pageVariants} className="h-full flex flex-col">{!selectedGroup ? (<><div className="flex justify-between items-center mb-8"><h2 className="text-3xl font-bold text-slate-800">Guruhlar</h2><div className="flex gap-3"><div className="relative"><FaFilter className="absolute left-3 top-3 text-indigo-500" /><select className="pl-9 pr-4 py-2.5 border rounded-lg bg-white" value={filterDays} onChange={(e) => setFilterDays(e.target.value)}><option value="all">Barcha</option><option value="odd_days">Dush-Chor-Juma</option><option value="even_days">Sesh-Pay-Shan</option><option value="daily">Har kuni</option></select></div><button onClick={openCreateModal} className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-indigo-700"><FaPlus /> Guruh Yaratish</button></div></div>{filteredGroups.length === 0 ? <p className="text-center text-gray-400">Guruhlar yo'q.</p> : <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">{filteredGroups.map(group => (<div key={group._id} onClick={() => setSelectedGroup(group)} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 cursor-pointer hover:shadow-lg relative overflow-hidden group"><div className="flex justify-between items-center mb-2"><div className="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded-full"><FaClock /> {group.time}</div><div className="bg-green-50 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full"><FaCalendarAlt /> {group.days === 'odd_days' ? 'Dush-Chor-Juma' : group.days === 'even_days' ? 'Sesh-Pay-Shan' : 'Har kuni'}</div></div><h3 className="text-xl font-bold text-slate-800 mb-1">{group.name}</h3><p className="text-gray-500 text-sm">{group.students.length} ta o'quvchi</p></div>))}</div>}</>) : (
+                <div className="flex flex-col h-[calc(100vh-100px)] bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+                    <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => setSelectedGroup(null)} className="text-gray-400 hover:text-white mr-2">← Orqaga</button>
+                            <div className="font-bold">{selectedGroup.name} (Chat)</div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex-1 bg-slate-50 p-4 overflow-y-auto space-y-4">
+                        {selectedGroup.messages.map((msg, idx) => {
+                            const isMe = msg.sender === 'Admin';
+                            const senderColor = stringToColor(msg.sender);
+                            const senderInitial = msg.sender.charAt(0).toUpperCase();
+
+                            return (
+                                <div key={idx} className={`flex items-end gap-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                    {/* Agar admin bo'lmasa, avatar chapda */}
+                                    {!isMe && (
+                                        <div className="group relative">
+                                            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 mb-1 shadow-sm cursor-pointer" style={{ backgroundColor: senderColor }}>
+                                                {senderInitial}
+                                            </div>
+                                            {/* TOOLTIP: Hover qilinganda user ma'lumotlari chiqadi */}
+                                            <div className="absolute bottom-10 left-0 bg-white p-3 rounded-lg shadow-xl border border-gray-100 w-48 opacity-0 group-hover:opacity-100 transition pointer-events-none z-50">
+                                                <p className="font-bold text-slate-800 text-sm">{msg.sender}</p>
+                                                {/* Bu yerda o'quvchini topib, telefonini chiqarishimiz mumkin */}
+                                                {(() => {
+                                                    const user = users.find(u => u.name === msg.sender);
+                                                    return user ? <p className="text-xs text-gray-500 mt-1">{user.phone} • {user.role === 'student' ? "O'quvchi" : "Ota-ona"}</p> : <p className="text-xs text-gray-400">Ma'lumot topilmadi</p>
+                                                })()}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className={`max-w-[70%] p-3 rounded-2xl shadow-sm relative ${isMe ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white text-slate-800 border border-gray-100 rounded-bl-none'}`}>
+                                        {!isMe && <p className="text-[10px] font-bold mb-1 opacity-70" style={{ color: senderColor }}>{msg.sender}</p>}
+                                        {msg.text} 
+                                        {msg.file && (
+                                            <div className={`mt-2 p-2 rounded-lg flex items-center gap-2 ${isMe ? 'bg-indigo-700/50' : 'bg-gray-100'}`}>
+                                                <div className="p-2 bg-white/20 rounded-full"><FaFileAlt/></div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs truncate font-bold">{msg.fileName || "Fayl"}</p>
+                                                    <a href={`http://localhost:5000${msg.file}`} target="_blank" rel="noopener noreferrer" className="text-[10px] underline opacity-80 hover:opacity-100">Yuklab olish</a>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <p className={`text-[9px] text-right mt-1 ${isMe ? 'text-indigo-200' : 'text-gray-400'}`}>{msg.time}</p>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                        <div ref={messagesEndRef} />
+                    </div>
+                    
+                    <form onSubmit={handleSendMessage} className="p-4 bg-white border-t flex items-center gap-2">
+                        <input type="file" ref={fileInputRef} onChange={e => setChatFile(e.target.files[0])} className="hidden" />
+                        <button type="button" onClick={() => fileInputRef.current.click()} className={`p-3 rounded-full transition ${chatFile ? 'bg-green-100 text-green-600' : 'text-gray-400 hover:bg-gray-100'}`}>
+                            <FaPaperclip />
+                        </button>
+                        
+                        <div className="flex-1 relative">
+                            {chatFile && (
+                                <div className="absolute -top-10 left-0 bg-green-100 text-green-700 text-xs px-3 py-1 rounded-full shadow flex items-center gap-2">
+                                    <FaFileAlt/> {chatFile.name} 
+                                    <button type="button" onClick={()=>{setChatFile(null); fileInputRef.current.value=""}}><FaTimesCircle/></button>
+                                </div>
+                            )}
+                            <input 
+                                type="text" 
+                                placeholder="Xabar..." 
+                                className="w-full bg-gray-100 border-0 rounded-full px-4 py-3 outline-none text-sm focus:ring-2 focus:ring-indigo-500" 
+                                value={chatMessage} 
+                                onChange={(e) => setChatMessage(e.target.value)} 
+                            />
+                        </div>
+                        <button className="bg-indigo-600 text-white p-3 rounded-full hover:bg-indigo-700 shadow-lg">
+                            <FaPaperPlane />
+                        </button>
+                    </form>
+                </div>
+            )}</motion.div>)}
             
             {activeTab === 'attendance' && (<motion.div key="attendance" initial="initial" animate="in" exit="out" variants={pageVariants} className="h-full">{!selectedGroup ? (<><div className="flex justify-between items-center mb-6"><h2 className="text-3xl font-bold text-slate-800">Davomat: Guruhni tanlang</h2><div className="flex gap-3"><div className="relative"><FaFilter className="absolute left-3 top-3 text-indigo-500" /><select className="pl-9 pr-4 py-2.5 border rounded-lg bg-white" value={filterDays} onChange={(e) => setFilterDays(e.target.value)}><option value="all">Barcha</option><option value="odd_days">Dush-Chor-Juma</option><option value="even_days">Sesh-Pay-Shan</option><option value="daily">Har kuni</option></select></div></div></div><div className="grid md:grid-cols-3 gap-6">{filteredGroups.map(group => (<div key={group._id} onClick={() => openAttendance(group)} className="bg-white p-6 rounded-xl shadow-sm hover:shadow-lg cursor-pointer border border-gray-200 transition"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-xl"><FaCalendarCheck /></div><div><h3 className="font-bold text-lg text-slate-800">{group.name}</h3><p className="text-sm text-gray-500">{group.time}</p><p className="text-xs text-gray-400">{group.students.length} ta o'quvchi</p></div></div></div>))}</div></>) : (<div className="bg-white rounded-2xl shadow-lg border border-gray-200 h-full flex flex-col"><div className="p-6 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl"><div className="flex items-center gap-3"><button onClick={() => setSelectedGroup(null)} className="text-gray-500 hover:text-indigo-600 font-bold">← Orqaga</button><h2 className="text-2xl font-bold text-slate-800">{selectedGroup.name} - Davomat</h2></div><div className="flex bg-gray-100 p-1 rounded-lg"><button onClick={() => setAttendanceView('daily')} className={`px-4 py-2 rounded-md text-sm font-bold ${attendanceView === 'daily' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}><FaList /> Kunlik</button><button onClick={() => setAttendanceView('history')} className={`px-4 py-2 rounded-md text-sm font-bold ${attendanceView === 'history' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}><FaTable /> Jurnal</button></div></div>
             {attendanceView === 'daily' && (<><div className="p-4 flex justify-between items-center border-b bg-indigo-50/50"><div className="flex gap-2 items-center"><label className="text-sm font-bold text-gray-700">Sana:</label><input type="date" className="p-2 border rounded-lg text-sm font-bold text-center" value={attendanceDate} onChange={(e) => setAttendanceDate(e.target.value)} /></div><button onClick={markAllPresent} className="bg-blue-100 text-blue-600 px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-200 transition flex items-center gap-2"><FaBolt /> Hammasi Bor</button></div><div className="p-6 overflow-y-auto flex-1"><table className="w-full text-left border-collapse"><thead><tr className="border-b text-gray-500 text-sm uppercase"><th className="p-3">O'quvchi</th><th className="p-3 text-center">Holat</th><th className="p-3">Izoh</th></tr></thead><tbody>{selectedGroup.students.map(student => { const status = attendanceMap[student._id]?.status || 'present'; const reason = attendanceMap[student._id]?.reason || ''; return (<tr key={student._id} className="border-b hover:bg-gray-50"><td className="p-4 font-bold text-slate-700">{student.name}</td><td className="p-4"><div className="flex justify-center gap-2"><button onClick={() => handleStatusChange(student._id, 'present')} className={`flex-1 py-2 rounded-lg font-bold text-xs ${status === 'present' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-700'}`}>BOR</button><button onClick={() => handleStatusChange(student._id, 'absent')} className={`flex-1 py-2 rounded-lg font-bold text-xs ${status === 'absent' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-700'}`}>YO'Q</button></div></td><td className="p-4">{status === 'absent' ? <input type="text" placeholder="Sababi..." className="w-full border rounded p-2 text-sm" value={reason} onChange={(e) => handleReasonChange(student._id, e.target.value)} /> : <span className="text-gray-400">-</span>}</td></tr>); })}</tbody></table></div><div className="p-6 border-t bg-gray-50 rounded-b-2xl flex justify-end"><button onClick={saveAttendance} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg"><FaCheck /> Saqlash</button></div></>)}
@@ -309,13 +413,12 @@ export default function AdminDashboard() {
             {activeTab === 'grades' && (<motion.div key="grades" initial="initial" animate="in" exit="out" variants={pageVariants}>{!selectedGroup ? (<><div className="flex justify-between items-center mb-6"><h2 className="text-3xl font-bold text-slate-800">Baholash: Guruhni tanlang</h2></div><div className="grid md:grid-cols-3 gap-6">{groups.map(group => (<div key={group._id} onClick={() => openGrades(group)} className="bg-white p-6 rounded-xl shadow-sm hover:shadow-lg cursor-pointer border border-gray-200 transition"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center text-xl"><FaStar /></div><div><h3 className="font-bold text-lg text-slate-800">{group.name}</h3><p className="text-sm text-gray-500">{group.students.length} o'quvchi</p></div></div></div>))}</div></>) : (<div className="bg-white rounded-2xl shadow-lg border border-gray-200 h-full flex flex-col"><div className="p-4 flex justify-between items-center border-b bg-indigo-50/50 rounded-t-2xl"><div className="flex items-center gap-3"><button onClick={() => setSelectedGroup(null)} className="text-gray-500 hover:text-indigo-600 font-bold">← Orqaga</button><h2 className="text-2xl font-bold text-slate-800">{selectedGroup.name} (Baholar)</h2></div><div className="flex bg-gray-100 p-1 rounded-lg"><button onClick={() => setGradeView('daily')} className={`px-4 py-2 rounded-md text-sm font-bold ${gradeView === 'daily' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}><FaList /> Kunlik</button><button onClick={() => setGradeView('history')} className={`px-4 py-2 rounded-md text-sm font-bold ${gradeView === 'history' ? 'bg-white shadow text-indigo-600' : 'text-gray-500'}`}><FaTable /> Jurnal</button></div></div>
             {gradeView === 'daily' && (<><div className="p-4 flex justify-between items-center border-b bg-indigo-50/50"><div className="flex gap-2 items-center"><input type="date" className="p-2 border rounded-lg text-sm font-bold w-40 text-center" value={gradeDate} onChange={(e) => setGradeDate(e.target.value)} /></div></div><div className="p-6 overflow-y-auto flex-1"><table className="w-full text-left border-collapse"><thead><tr className="border-b text-gray-500 text-sm uppercase"><th className="p-3">O'quvchi</th><th className="p-3 text-center">Baho (1-5)</th><th className="p-3">Izoh</th></tr></thead><tbody>{selectedGroup.students.map(student => { const score = gradeMap[student._id]?.score || ''; const comment = gradeMap[student._id]?.comment || ''; return (<tr key={student._id} className="border-b hover:bg-gray-50"><td className="p-4 font-bold text-slate-700">{student.name}</td><td className="p-4 text-center"><input type="number" min="1" max="5" className="w-16 p-2 border rounded-lg text-center font-bold focus:ring-2 focus:ring-yellow-400 outline-none" value={score} onChange={(e) => handleScoreChange(student._id, e.target.value)} /></td><td className="p-4"><input type="text" placeholder="Izoh..." className="w-full border rounded p-2 text-sm" value={comment} onChange={(e) => handleCommentChange(student._id, e.target.value)} /></td></tr>); })}</tbody></table></div><div className="p-6 border-t bg-gray-50 rounded-b-2xl flex justify-end"><button onClick={saveGrades} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-lg"><FaCheck /> Saqlash</button></div></>)}
             {gradeView === 'history' && (<div className="p-6 overflow-auto"><table className="w-full text-left border-collapse border border-gray-200"><thead><tr><th className="p-3 border bg-gray-50 text-sm font-bold min-w-[200px] sticky left-0 z-10 bg-gray-50">F.I.SH</th>{selectedGroup.grades?.map((g, idx) => <th key={idx} className="p-3 border bg-gray-50 text-center text-xs font-bold min-w-[50px]">{g.date}</th>)}</tr></thead><tbody>{selectedGroup.students.map(student => (<tr key={student._id} className="hover:bg-gray-50"><td className="p-3 border font-medium text-slate-700 sticky left-0 bg-white">{student.name}</td>{selectedGroup.grades?.map((g, idx) => { const record = g.records.find(r => r.studentId === student._id); return (<td key={idx} className="p-3 border text-center font-bold">{record && record.score > 0 ? <span className={`px-2 py-1 rounded text-xs ${record.score >= 4 ? 'bg-green-100 text-green-700' : record.score === 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{record.score}</span> : <span className="text-gray-300">-</span>}</td>); })}</tr>))}</tbody></table>{selectedGroup.grades?.length === 0 && <p className="text-center text-gray-400 mt-10">Baholar yo'q.</p>}</div>)}</div>)}</motion.div>)}
-            {activeTab === 'users' && (<motion.div key="users" initial="initial" animate="in" exit="out" variants={pageVariants}><div className="flex justify-between items-center mb-8"><h2 className="text-3xl font-bold text-slate-800">Foydalanuvchilar</h2><div className="flex gap-2"><select className="p-2 border rounded-lg bg-white text-gray-600 font-bold" value={userStatusFilter} onChange={e => setUserStatusFilter(e.target.value)}><option value="active">O'qiyotganlar</option><option value="left">Chiqib ketganlar</option><option value="all">Barchasi</option></select><button onClick={openCreateUserModal} className="bg-indigo-600 text-white px-6 py-2 rounded-lg flex gap-2 items-center"><FaPlus /> Yangi</button></div></div><div className="bg-white rounded-xl shadow-sm border overflow-hidden"><table className="w-full text-left"><thead className="bg-slate-50 border-b"><tr><th className="p-4">Ism</th><th className="p-4">Telefon</th><th className="p-4">Rol</th><th className="p-4">Status</th><th className="p-4 text-center">Amallar</th></tr></thead><tbody>{getFilteredUsers().map((u, i) => (<tr key={i} className={`border-b hover:bg-slate-50 ${u.status === 'left' ? 'bg-red-50' : ''}`}><td className="p-4">{u.name}</td><td className="p-4">{u.phone}</td><td className="p-4 capitalize">{u.role}</td><td className="p-4 text-sm font-bold">{(u.status === 'active' || !u.status) ? <span className="text-green-600">O'qimoqda</span> : <span className="text-red-500">Chiqib ketgan</span>}</td><td className="p-4 flex justify-center"><button onClick={() => openEditUserModal(u)} className="text-gray-400 hover:text-indigo-600 p-2"><FaPen /></button></td></tr>))}</tbody></table></div></motion.div>)}
+            {activeTab === 'users' && (<motion.div key="users" initial="initial" animate="in" exit="out" variants={pageVariants}><div className="flex justify-between items-center mb-8"><h2 className="text-3xl font-bold text-slate-800">Foydalanuvchilar</h2><div className="flex gap-2"><select className="p-2 border rounded-lg bg-white text-gray-600 font-bold" value={userStatusFilter} onChange={e => setUserStatusFilter(e.target.value)}><option value="active">O'qiyotganlar</option><option value="left">Chiqib ketganlar</option><option value="all">Barchasi</option></select><button onClick={openCreateUserModal} className="bg-indigo-600 text-white px-6 py-2 rounded-lg flex gap-2 items-center"><FaPlus /> Yangi</button></div></div><div className="bg-white rounded-xl shadow-sm border overflow-hidden"><table className="w-full text-left"><thead className="bg-slate-50 border-b"><tr><th className="p-4">F.I.SH</th><th className="p-4">Telefon</th><th className="p-4">Rol</th><th className="p-4">Ota-ona</th><th className="p-4">Status</th><th className="p-4 text-center">Amallar</th></tr></thead><tbody>{getFilteredUsers().map((u, i) => { const parent = u.parentId ? users.find(p => p._id === u.parentId) : null; return (<tr key={i} className={`hover:bg-slate-50 transition ${u.status === 'left' ? 'bg-red-50' : ''}`}><td className="p-4 font-bold text-slate-700">{u.name}</td><td className="p-4 font-mono text-slate-600">{u.phone}</td><td className="p-4 capitalize"><span className={`px-2 py-1 rounded text-xs font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : u.role === 'parent' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{u.role === 'student' ? "O'quvchi" : u.role === 'parent' ? "Ota-ona" : "Admin"}</span></td><td className="p-4">{u.role === 'student' ? (parent ? (<div className="flex items-center gap-2"><div className="bg-orange-100 p-1.5 rounded-full text-orange-600 text-xs"><FaUserTie/></div><div><div className="text-sm font-bold text-slate-700">{parent.name}</div><div className="text-[10px] text-gray-500">{parent.phone}</div></div></div>) : (<span className="text-red-400 text-xs italic flex items-center gap-1"><FaExclamationCircle/> Biriktirilmagan</span>)) : (<span className="text-gray-300">-</span>)}</td><td className="p-4 text-sm font-bold">{(u.status === 'active' || !u.status) ? <span className="text-green-600 bg-green-50 px-2 py-1 rounded">O'qimoqda</span> : <span className="text-red-500 bg-red-50 px-2 py-1 rounded">Chiqib ketgan</span>}</td><td className="p-4 flex justify-center"><button onClick={() => openEditUserModal(u)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition"><FaPen /></button></td></tr>); })}</tbody></table></div></motion.div>)}
             
-            {/* --- IMTIHONLAR TABI (OPTIMALLASHTIRILGAN VA NATIJALAR YANGILANGAN) --- */}
+            {/* --- IMTIHONLAR TABI (OPTIMALLASHTIRILGAN) --- */}
             {activeTab === 'exams' && (
                 <motion.div key="exams" initial="initial" animate="in" exit="out" variants={pageVariants}>
                     
-                    {/* HEADER */}
                     <div className="flex justify-between items-center mb-8">
                         <div>
                             <h2 className="text-3xl font-bold text-slate-800">Imtihonlar Boshqaruvi</h2>
@@ -326,7 +429,6 @@ export default function AdminDashboard() {
                         </button>
                     </div>
 
-                    {/* IMTIHONLAR RO'YXATI - KARTALAR */}
                     <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6 mb-12">
                         {exams.length === 0 ? (
                             <div className="col-span-full text-center py-10 bg-white rounded-2xl shadow-sm border border-dashed border-gray-300">
@@ -335,7 +437,7 @@ export default function AdminDashboard() {
                         ) : (
                             exams.map(exam => {
                                 const timePerQ = getTimePerQuestion(exam.course);
-                                const totalTime = formatTotalTime(25 * timePerQ); // 25 ta savol uchun umumiy vaqt
+                                const totalTime = formatTotalTime(25 * timePerQ);
 
                                 return (
                                     <div key={exam._id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 relative group hover:shadow-xl transition-all duration-300">
@@ -381,7 +483,7 @@ export default function AdminDashboard() {
                         )}
                     </div>
 
-                    {/* --- NATIJALAR VA ANALITIKA BO'LIMI --- */}
+                    {/* --- NATIJALAR VA ANALITIKA --- */}
                     <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
                         <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
                             <div className="flex items-center gap-3">
@@ -401,7 +503,6 @@ export default function AdminDashboard() {
                             </div>
                         </div>
 
-                        {/* 1. FILTERLAR VA KIRITISH */}
                         <div className="p-8 pb-0">
                             <div className="grid md:grid-cols-3 gap-6 mb-8 bg-gray-50 p-6 rounded-2xl border border-gray-200">
                                 <div>
@@ -427,7 +528,6 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
-                            {/* 2. BAHOLASH FORMASI (Agar o'quvchi tanlansa) */}
                             <AnimatePresence>
                             {gradingStudentId && gradingExamId && (
                                 <motion.div initial={{opacity:0, y:-20}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-20}} className="mb-10">
@@ -458,7 +558,6 @@ export default function AdminDashboard() {
                                                 </button>
                                             </div>
 
-                                            {/* NATIJA PREVIEW */}
                                             <div className="mt-6 flex flex-col md:flex-row justify-center items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
                                                 <div className="text-center">
                                                     <div className="text-xs font-bold text-gray-400 uppercase">Jami Ball</div>
@@ -489,7 +588,6 @@ export default function AdminDashboard() {
                             </AnimatePresence>
                         </div>
 
-                        {/* 3. OPTIMALLASHTIRILGAN JADVAL */}
                         <div className="p-8 pt-0">
                             <div className="overflow-hidden rounded-xl border border-gray-200">
                                 <table className="w-full text-left border-collapse">
@@ -556,7 +654,7 @@ export default function AdminDashboard() {
             
         </AnimatePresence></div>
 
-        {/* PERMISSION MODAL (YANGILANGAN: Barcha o'quvchilarni chiqarish) */}
+        {/* --- MODALLAR --- */}
         {isPermissionModalOpen && permissionExam && (
             <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                 <div className="bg-white rounded-2xl w-full max-w-lg p-0 shadow-2xl flex flex-col max-h-[85vh]">
@@ -576,7 +674,6 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="overflow-y-auto flex-1 p-4 space-y-2">
-                        {/* O'ZGARISH: u.course === permissionExam.course shartini olib tashladim. Endi hamma studentlar chiqadi */}
                         {users.filter(u => u.role === 'student').length === 0 ? (
                             <div className="text-center py-10">
                                 <FaUserGraduate className="mx-auto text-gray-300 text-4xl mb-3"/>
@@ -585,7 +682,6 @@ export default function AdminDashboard() {
                         ) : (
                             users.filter(u => u.role === 'student').map(user => {
                                 const isAllowed = user.examPermission?.allowed && user.examPermission?.examId === permissionExam._id;
-                                // Agar o'quvchi kursi imtihon kursi bilan bir xil bo'lsa, ajratib ko'rsatamiz
                                 const isCourseMatch = user.course === permissionExam.course;
                                 
                                 return (
@@ -598,7 +694,6 @@ export default function AdminDashboard() {
                                                 <div className="font-bold text-slate-700">{user.name}</div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-xs text-gray-500">{user.phone}</span>
-                                                    {/* Agar kursi boshqa bo'lsa ogohlantiramiz */}
                                                     {!isCourseMatch && (
                                                         <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 rounded border border-yellow-200">
                                                             Kursi: {user.course || "Yo'q"}
